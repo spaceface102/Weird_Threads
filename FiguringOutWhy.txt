@@ -1,0 +1,128 @@
+It all comes down to this function:
+    void* SumBetween(void *arg)
+    {
+        #ifdef SLOWER
+        ((sum_args *)arg)->return_total = 0;
+        for (int64_t i = ((sum_args *)arg)->start; i < ((sum_args *)arg)->end; i++)
+            ((sum_args *)arg)->return_total += i;
+        #endif
+
+        #ifdef FASTER
+        uint64_t total = 0;
+        for (int64_t i = ((sum_args *)arg)->start; i < ((sum_args *)arg)->end; i++)
+            total += i;
+        ((sum_args *)arg)->return_total = total;
+        #endif
+        
+        return NULL;
+    }
+
+And just for extra supporting information:
+    typedef struct sum_args
+    {
+        int64_t start;
+        int64_t end;
+        int64_t return_total;
+    } sum_args;
+
+
+
+The version of the function that operates on the
+passed in struct is significantly slower. So slow in fact,
+that not even running in parallel helps, if anything It just 
+makes it slower. Here are my ideas as to why it is slower, 
+which I plan to test and report on.
+
+1) The compiler is doing some optimization,
+    and when using a temp total varaible for the lifetime
+    of the function, it ensures that it is being used 
+    as a register.
+
+    Nope, tried it out in the posibility number two
+
+2) Simply, modifiying the variable indirectly is slower. Since
+    The program has to derefrence the address of the passed in
+    struct pointer, and then modifiy it, it might be an extra
+    hidden step that makes the algorithim significantly slower.
+
+Test Refrence Code:
+    #define BIGNUM 1000000000UL
+
+    typedef struct numbers
+    {
+        int64_t start;
+        int64_t end;
+        int64_t total;
+    } numbers;
+
+
+    //base code; everything else looked like so, just using different variable access
+    int64_t sum(void)
+    {
+        int64_t total = 0;
+        for (int64_t i = 0; i <= BIGNUM; i++)
+            total += i;
+        return total;
+    }
+
+Compiler Options:
+clang variable_access_tests.c -ansi -std=c99 -Wall -O0 -o run.exe
+
+
+Results:
+Choose a function to execute!
+0. int64_t sum(void)
+1. void sumpoint(int64_t *total)
+2. void sumvoidpoint(void *total)
+3. int64_t sumstruct(void)
+4. sumstructpoint(numbers *p)
+5. sumstructvoidpoint(void *p)
+6. int64_t sumregister(void)
+7. int64_t sumregisterV2(void)
+
+int64_t sum(void) took: 2.207833
+void sumpoint(int64_t *total) took: 2.467067
+void sumvoidpoint(void *total) took: 2.471592
+int64_t sumstruct(void) took: 2.742239
+sumstructpoint(numbers *p) took: 2.488190
+sumstructvoidpoint(void *p) took: 2.486247
+int64_t sumregister(void) took: 2.161722
+int64_t sumregisterV2(void) took: 2.157944
+
+
+3) The size of the new strucuture with three 8 byte variables
+    doesn't suit the basic architecture of the processor as well,
+    and might have to do extra instructions in order to account for it
+        a) the is one is a strech, because in both versions we are
+        still accessing the strucutre for at least the .end and 
+        .start members. Of course, the compiler might be optimizing
+        this out one way or another, seeing that those values are not
+        changing, but that is also why I am compiling the program 
+        using -O0
+
+    This also doesn't seem to be the problem....
+
+4) If the program is taking longer to execute, then pthread_join is also
+    taking longer to return. Maybe it has to do with how the pthread_join
+    is working. Maybe.
+
+5) I don't know, and I have to start looking at the assembly
+
+6) I should probably ask somebody about it
+
+
+slower:
+sudo time ./run.exe 
+500000000500000000
+14.63user 0.00system 0:03.22elapsed 453%CPU (0avgtext+0avgdata 1828maxresident)k
+0inputs+0outputs (0major+97minor)pagefaults 0swaps
+
+faster:
+sudo time ./run.exe 
+500000000500000000
+2.97user 0.00system 0:00.67elapsed 440%CPU (0avgtext+0avgdata 1708maxresident)k
+0inputs+0outputs (0major+83minor)pagefaults 0swaps
+
+normal:
+2.80user 0.00system 0:02.80elapsed 99%CPU (0avgtext+0avgdata 1612maxresident)k
+0inputs+0outputs (0major+73minor)pagefaults 0swaps
