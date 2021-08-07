@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define NUM_CORES 4
+#define NUM_CORES 24
 #define MULTI_THREADED 1 //1 for true, 0 for false
 #define BIGVALUE 1000000000UL
 
@@ -18,6 +18,7 @@ typedef struct sum_args
     int64_t start;
     int64_t end;
     int64_t return_total;
+    int64_t padding[5];
 } sum_args;
 
 
@@ -41,7 +42,7 @@ void* SumBetween(void *arg)
 
 int64_t SumUpTo_WithThreads(int64_t limit)
 {   //start counting from zero
-    const int numthreads = NUM_CORES + (int)(NUM_CORES*MULTI_THREADED*0.25);
+    const int numthreads = NUM_CORES + (int)(NUM_CORES*MULTI_THREADED*0.35);
     pthread_t threads[numthreads];
     sum_args listofargs[numthreads];
     int64_t offset = limit/numthreads;
